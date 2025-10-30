@@ -13,12 +13,25 @@ import threading
 import time
 import os
 import warnings
+import pygame
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 warnings.filterwarnings('ignore')
 
 # Import emotion detector only
 from emotion_detector import AdvancedEmotionDetector
+
+# Initialize pygame mixer for audio
+pygame.mixer.init()
+
+# Define music paths for different emotions
+MUSIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'music')
+EMOTION_MUSIC = {
+    'happy': os.path.join(MUSIC_DIR, 'happy.mp3'),
+    'sad': os.path.join(MUSIC_DIR, 'sad.mp3'),
+    'angry': os.path.join(MUSIC_DIR, 'angry.mp3'),
+    'neutral': os.path.join(MUSIC_DIR, 'neutral.mp3')
+}
 
 class ArduinoRFIDListener:
     """Listens to Arduino RFID scanner"""
@@ -37,13 +50,23 @@ class ArduinoRFIDListener:
         for port in ports:
             print(f"  - {port.device}: {port.description}")
         
-        # Try to find Arduino
+        # Try to find Arduino by checking device descriptions
+        arduino_port = None
         for port in ports:
             desc = port.description.upper()
-            if ('ARDUINO' in desc or 'CH340' in desc or 'USB' in desc or 
-                'SERIAL' in desc or 'UART' in desc):
-                print(f"\n✓ Found Arduino-like device at: {port.device}")
-                return port.device
+            # Look specifically for Arduino first
+            if 'ARDUINO' in desc:
+                arduino_port = port.device
+                print(f"\n✓ Found Arduino at: {port.device}")
+                break
+            # Fallback to CH340 (common Arduino clone chip) if no Arduino found
+            elif 'CH340' in desc and not arduino_port:
+                arduino_port = port.device
+            # Last resort: USB Serial devices
+            elif ('USB SERIAL' in desc or 'COM' in desc) and not arduino_port:
+                arduino_port = port.device
+        
+        return arduino_port
         
         return None
     
@@ -203,6 +226,17 @@ class EmotionAnalyzer:
             
             dominant_emotion = max(emotions_detected, key=emotions_detected.get)
             print(f"\n✅ DOMINANT EMOTION: {dominant_emotion.upper()}")
+            
+            # Stop any currently playing music
+            pygame.mixer.music.stop()
+            
+            # Play music based on dominant emotion
+            if dominant_emotion in EMOTION_MUSIC and os.path.exists(EMOTION_MUSIC[dominant_emotion]):
+                print(f"\n🎵 Playing music for {dominant_emotion} mood...")
+                pygame.mixer.music.load(EMOTION_MUSIC[dominant_emotion])
+                pygame.mixer.music.play()
+            else:
+                print("\n⚠️ No music file found for this emotion")
         else:
             print("❌ No emotions detected")
         
@@ -263,7 +297,8 @@ def main():
     print("  4. Results will be displayed after analysis")
     print("\nPress Ctrl+C to exit\n")
     
-    analysis_duration = 10
+    # Configuration for emotion analysis
+    analysis_duration = 5  # Increased to 30 seconds for better emotion detection
     
     try:
         while True:
@@ -291,6 +326,8 @@ def main():
         print("\n🛑 Shutting down...")
         analyzer.stop_camera()
         rfid.disconnect()
+        pygame.mixer.music.stop()
+        pygame.mixer.quit()
         print("✅ System closed")
 
 if __name__ == "__main__":
