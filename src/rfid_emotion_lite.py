@@ -30,7 +30,7 @@ EMOTION_MUSIC = {
     'happy': os.path.join(MUSIC_DIR, 'happy.mp3'),
     'sad': os.path.join(MUSIC_DIR, 'sad.mp3'),
     'angry': os.path.join(MUSIC_DIR, 'angry.mp3'),
-    'neutral': os.path.join(MUSIC_DIR, 'neutral.mp3')
+    'neutral': os.path.join(MUSIC_DIR, 'sad.mp3')
 }
 
 class ArduinoRFIDListener:
@@ -116,7 +116,7 @@ class ArduinoRFIDListener:
 
 class EmotionAnalyzer:
     """Performs emotion analysis on detected faces using OpenCV"""
-    def __init__(self):
+    def __init__(self, serial_connection=None):
         print("Loading Face Detector (OpenCV)...")
         self.face_cascade = cv2.CascadeClassifier(
             cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
@@ -127,6 +127,7 @@ class EmotionAnalyzer:
         
         self.cap = None
         self.analyzing = False
+        self.ser = serial_connection  # Serial connection to Arduino for LED control
     
     def start_camera(self):
         """Start camera"""
@@ -227,6 +228,9 @@ class EmotionAnalyzer:
             dominant_emotion = max(emotions_detected, key=emotions_detected.get)
             print(f"\n✅ DOMINANT EMOTION: {dominant_emotion.upper()}")
             
+            # Control LEDs based on dominant emotion
+            self.control_leds_for_emotion(dominant_emotion)
+            
             # Stop any currently playing music
             pygame.mixer.music.stop()
             
@@ -239,6 +243,7 @@ class EmotionAnalyzer:
                 print("\n⚠️ No music file found for this emotion")
         else:
             print("❌ No emotions detected")
+            self.send_led_command("LED_OFF")
         
         print(f"{'='*60}\n")
     
@@ -254,6 +259,64 @@ class EmotionAnalyzer:
             'surprise': (0, 255, 255)
         }
         return colors.get(emotion, (255, 255, 255))
+    
+    def send_led_command(self, command):
+        """Send LED control command to Arduino"""
+        if self.ser is None or not self.ser.is_open:
+            print(f"[LED Sim] {command}")
+            return
+        
+        try:
+            self.ser.write((command + '\n').encode())
+            print(f"[LED Control] Sent: {command}")
+            time.sleep(0.1)
+            
+            # Read response
+            if self.ser.in_waiting > 0:
+                response = self.ser.readline().decode('utf-8').strip()
+                if response:
+                    print(f"[LED Response] {response}")
+        except Exception as e:
+            print(f"[LED Error] {e}")
+    
+    def control_leds_for_emotion(self, emotion):
+        """Control LEDs based on detected emotion"""
+        if emotion.lower() == 'happy':
+            print("\n🟢 HAPPY EMOTION DETECTED - Green LED Blinking!")
+            self.send_led_command("LED_GREEN_BLINK")
+        elif emotion.lower() == 'angry':
+            print("\n🔴 ANGRY EMOTION DETECTED - Red LED Blinking!")
+            self.send_led_command("LED_RED_BLINK")
+        elif emotion.lower() == 'neutral':
+            print("\n😐 NEUTRAL EMOTION DETECTED - Red LED Blinking!")
+            self.send_led_command("LED_RED_BLINK")
+            self.send_lcd_message("NEUTRAL")
+        else:
+            print(f"\n😐 {emotion.upper()} EMOTION - LEDs OFF")
+            self.send_led_command("LED_OFF")
+            self.send_lcd_message("NONE")
+    
+    def send_lcd_message(self, message):
+        """Send message to LCD display via Arduino"""
+        if self.ser is None or not self.ser.is_open:
+            print(f"[LCD Sim] {message}")
+            return
+        
+        try:
+            # Limit message length to 16 characters for LCD
+            message = message[:16]
+            
+            self.ser.write((f"LCD:{message}\n").encode())
+            print(f"[LCD Display] Sent: {message}")
+            time.sleep(0.1)
+            
+            # Read response
+            if self.ser.in_waiting > 0:
+                response = self.ser.readline().decode('utf-8').strip()
+                if response:
+                    print(f"[LCD Response] {response}")
+        except Exception as e:
+            print(f"[LCD Error] {e}")
     
     def stop_camera(self):
         """Stop camera"""
@@ -276,9 +339,9 @@ def main():
         print("Please connect your Arduino and try again")
         return
     
-    # Initialize emotion analyzer
+    # Initialize emotion analyzer with serial connection for LED control
     print("\n[2/3] Initializing Emotion Analyzer...")
-    analyzer = EmotionAnalyzer()
+    analyzer = EmotionAnalyzer(serial_connection=rfid.ser)
     
     # Start camera
     print("\n[3/3] Starting Camera...")
