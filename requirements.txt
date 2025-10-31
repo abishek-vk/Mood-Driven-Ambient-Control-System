@@ -4,3 +4,6 @@ numpy
 Pillow
 tensorflow
 matplotlib
+pyserial
+mtcnn
+requests
