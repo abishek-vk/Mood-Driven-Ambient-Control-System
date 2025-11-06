@@ -29,7 +29,7 @@
 #define SS_PIN 10              // RFID Chip Select
 #define RST_PIN 9              // RFID Reset
 #define LED_GREEN_PIN 2        // Green LED (Happy emotion)
-#define LED_RED_PIN 3          // Red LED (Angry emotion)
+#define LED_RED_PIN 4          // Red LED (Angry emotion)
 #define BUZZER_PIN 7           // Buzzer for alerts
 
 // ==================== RFID MODULE ====================
